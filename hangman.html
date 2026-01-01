@@ -141,6 +141,24 @@
         font-weight: 900;
       }
 
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.14);
+      }
+      .toggle input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+      }
+      .toggle:has(input:disabled) {
+        opacity: 0.45;
+      }
+
       .bigKanji {
         font-size: 56px;
         font-weight: 950;
@@ -199,7 +217,7 @@
         flex-wrap: wrap;
       }
 
-      /* Keyboard (QWERTY / Kana) */
+      /* Keyboard */
       .kbdHint {
         color: var(--muted);
         font-size: 12px;
@@ -253,10 +271,27 @@
         text-transform: none;
         font-weight: 900;
       }
-      .key.kana.used,
-      .key.kana.good,
-      .key.kana.bad {
-        /* kana keys shouldn't be "used" */
+
+      /* Kana dock layout (Normal mode) */
+      .kbdWrap.kanaDock {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      @media (max-width: 900px) {
+        .kbdWrap.kanaDock {
+          grid-template-columns: 1fr;
+        }
+      }
+      .kbdCol {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .kbdControls {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: center;
       }
 
       /* MCQ (Hard mode) */
@@ -339,11 +374,17 @@
         line-height: 1.4;
       }
 
+      /* Stats ABOVE image */
       .statGrid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
-        margin-top: 12px;
+        margin-bottom: 12px;
+      }
+      @media (max-width: 700px) {
+        .statGrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
       }
       .stat {
         background: rgba(0, 0, 0, 0.14);
@@ -385,6 +426,29 @@
       .dot.bad {
         background: rgba(255, 107, 107, 0.8);
       }
+
+      /* Full-width keyboard dock (Normal mode) */
+      .keyboardDock {
+        grid-column: 1 / -1;
+      }
+      .keyboardDock .content {
+        padding: 14px 16px;
+      }
+      .keyboardDock .kbdHint {
+        margin-top: 0;
+      }
+      .keyboardDock .kbdWrap {
+        margin-top: 10px;
+      }
+      /* Bigger keys when docked full-width */
+      .keyboardDock .key {
+        min-width: 44px;
+        padding: 12px 0;
+        font-size: 18px;
+      }
+      .keyboardDock .kbdRow {
+        gap: 10px;
+      }
     </style>
   </head>
 
@@ -399,7 +463,7 @@
             <span class="labelTiny">Mode:</span>
             <select id="modeSelect" aria-label="Mode">
               <option value="easy">Easy</option>
-              <option value="normal">Normal</option>
+              <option value="normal" selected>Normal</option>
               <option value="hard">Hard</option>
             </select>
 
@@ -415,13 +479,23 @@
 
         <div class="content">
           <div class="row" style="margin-bottom: 12px">
-            <button class="btn primary" id="btnLoadLevel" disabled>
-              Load Level
-            </button>
             <button class="btn ok" id="btnStart" disabled>Start</button>
             <button class="btn danger" id="btnResetRun" disabled>
               Reset Run
             </button>
+
+            <label class="toggle" title="Easy mode only">
+              <input id="toggleFurigana" type="checkbox" checked />
+              <span class="labelTiny">Show Furigana (Easy)</span>
+            </label>
+
+            <span id="hardAnswerWrap" class="toggle" style="display: none">
+              <span class="labelTiny">Hard Answers</span>
+              <select id="hardAnswerSelect" aria-label="Hard answers">
+                <option value="reading">Reading (かな)</option>
+                <option value="kanji">Kanji</option>
+              </select>
+            </span>
           </div>
 
           <div id="gameArea">
@@ -437,30 +511,24 @@
               <input
                 id="fullGuess"
                 type="text"
-                placeholder="Type romaji and press Enter…"
+                placeholder="Type kana/romaji to guess the full reading…"
                 autocomplete="off"
                 spellcheck="false"
-              />
-              <input
-                id="kanaGuess"
-                type="text"
-                placeholder="Click hiragana below…"
-                autocomplete="off"
-                spellcheck="false"
-                readonly
-                style="display: none"
               />
               <button class="btn ok" id="btnSubmit">Submit</button>
               <button class="btn" id="btnHint">Hint</button>
               <button class="btn danger" id="btnSkip">Skip</button>
             </div>
 
-            <div class="kbdHint" id="kbdHint">Click letters (QWERTY).</div>
-            <div class="kbdWrap" id="keyboard"></div>
+            <!-- HOME location for keyboard (Easy mode lives here; Normal gets docked full-width) -->
+            <div id="keyboardHome">
+              <div class="kbdHint" id="kbdHint">Click letters (QWERTY).</div>
+              <div class="kbdWrap" id="keyboard"></div>
+            </div>
 
             <div class="mcqArea" id="mcqArea">
               <div class="kbdHint" id="mcqHint">
-                Pick the correct reading (same level).
+                Pick the correct answer (same level).
               </div>
               <div class="mcqGrid" id="mcqGrid"></div>
             </div>
@@ -473,17 +541,33 @@
         </div>
       </section>
 
-      <!-- RIGHT: ANIMATION + STATS -->
+      <!-- RIGHT: STATS + ANIMATION + MUTE -->
       <aside class="rightPanel">
         <section class="card">
-          <div class="cardHeader">
-            <div class="title">Animation + Music</div>
-            <div class="row">
-              <button class="btn" id="btnMusic">Play Music</button>
-            </div>
+          <div class="cardHeader" style="justify-content: flex-end">
+            <label class="toggle">
+              <input id="muteMusic" type="checkbox" />
+              <span class="labelTiny">Mute Music</span>
+            </label>
           </div>
 
           <div class="content">
+            <!-- Stats ABOVE image -->
+            <div class="statGrid">
+              <div class="stat">
+                <div class="label">Lives</div>
+                <div class="value" id="statLives">0</div>
+              </div>
+              <div class="stat">
+                <div class="label">Streak</div>
+                <div class="value" id="statStreak">0</div>
+              </div>
+              <div class="stat">
+                <div class="label">Solved (Level)</div>
+                <div class="value" id="statSolvedLevel">0/100</div>
+              </div>
+            </div>
+
             <div class="artWrap">
               <canvas
                 id="spriteCanvas"
@@ -498,25 +582,6 @@
               </div>
             </div>
 
-            <div class="statGrid">
-              <div class="stat">
-                <div class="label">Words loaded</div>
-                <div class="value" id="statTotal">0</div>
-              </div>
-              <div class="stat">
-                <div class="label">This level size</div>
-                <div class="value" id="statLevelSize">0</div>
-              </div>
-              <div class="stat">
-                <div class="label">Lives</div>
-                <div class="value" id="statLives">6</div>
-              </div>
-              <div class="stat">
-                <div class="label">Streak</div>
-                <div class="value" id="statStreak">0</div>
-              </div>
-            </div>
-
             <!-- hidden file info block -->
             <div style="display: none">
               Sprite: sleep_kev.png / CSV: jlpt_vocab.csv / Music:
@@ -527,6 +592,15 @@
 
         <audio id="bgm" src="assets/music/bgm.mp3" loop preload="auto"></audio>
       </aside>
+
+      <!-- FULL-WIDTH KEYBOARD DOCK (Normal mode only) -->
+      <section
+        class="card keyboardDock"
+        id="keyboardDock"
+        style="display: none"
+      >
+        <div class="content" id="keyboardDockContent"></div>
+      </section>
     </div>
 
     <script>
@@ -535,18 +609,19 @@
       const levelSelect = document.getElementById("levelSelect");
       const btnPrevLevel = document.getElementById("btnPrevLevel");
       const btnNextLevel = document.getElementById("btnNextLevel");
-      const btnLoadLevel = document.getElementById("btnLoadLevel");
       const btnStart = document.getElementById("btnStart");
       const btnResetRun = document.getElementById("btnResetRun");
+
+      const toggleFurigana = document.getElementById("toggleFurigana");
+      const hardAnswerWrap = document.getElementById("hardAnswerWrap");
+      const hardAnswerSelect = document.getElementById("hardAnswerSelect");
 
       const kanjiText = document.getElementById("kanjiText");
       const meaningText = document.getElementById("meaningText");
       const furiganaLine = document.getElementById("furiganaLine");
       const blanksEl = document.getElementById("blanks");
 
-      const guessBar = document.getElementById("guessBar");
       const fullGuess = document.getElementById("fullGuess");
-      const kanaGuess = document.getElementById("kanaGuess");
       const btnSubmit = document.getElementById("btnSubmit");
       const btnHint = document.getElementById("btnHint");
       const btnSkip = document.getElementById("btnSkip");
@@ -561,17 +636,23 @@
       const toastDot = document.querySelector("#toast .dot");
       const toastText = document.getElementById("toastText");
 
-      const statTotal = document.getElementById("statTotal");
-      const statLevelSize = document.getElementById("statLevelSize");
       const statLives = document.getElementById("statLives");
       const statStreak = document.getElementById("statStreak");
+      const statSolvedLevel = document.getElementById("statSolvedLevel");
 
+      const muteMusic = document.getElementById("muteMusic");
       const bgm = document.getElementById("bgm");
-      const btnMusic = document.getElementById("btnMusic");
 
       const spriteCanvas = document.getElementById("spriteCanvas");
       const ctx = spriteCanvas.getContext("2d");
       const artFallback = document.getElementById("artFallback");
+
+      // Keyboard docking
+      const keyboardHome = document.getElementById("keyboardHome");
+      const keyboardDock = document.getElementById("keyboardDock");
+      const keyboardDockContent = document.getElementById(
+        "keyboardDockContent"
+      );
 
       // Hidden debug
       const statusPill = document.getElementById("statusPill");
@@ -579,17 +660,17 @@
       // ========= CONFIG =========
       const WORDS_PER_LEVEL = 100;
 
+      // Lives per mode
+      const MAX_WRONG_EASY = 6;
+      const MAX_WRONG_NORMAL = 13;
+      const MAX_WRONG_HARD = 6;
+
       // Sprite sheet: 7 frames, each 120x120, arranged 3 across then wrap down.
       const SPRITE_FILE = "sleep_kev.png";
       const SPRITE_FRAMES = 7;
       const SPRITE_FRAME_W = 120;
       const SPRITE_FRAME_H = 120;
       const SPRITE_COLS = 3;
-
-      const MAX_WRONG = 6; // wrong: 0..6 -> frame 0..6
-
-      // Reorder: N5 -> N4 -> N3 -> N2 -> N1 (each section already easiest->hardest)
-      const JLPT_ORDER = ["N5", "N4", "N3", "N2", "N1"];
 
       // QWERTY (Easy mode letter guessing)
       const QWERTY_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
@@ -616,17 +697,18 @@
       ];
 
       // ========= STATE =========
-      let orderedWords = []; // reordered N5->N1 (capped to 8100)
+      let orderedWords = [];
       let totalLevels = 1;
 
-      let levelSlice = []; // 100 words for current level
-      let levelWords = []; // playable subset (needs furigana)
+      let levelSlice = [];
+      let levelWords = [];
       let remaining = [];
 
       let current = null;
       let targetRomaji = "";
       let targetKanaNorm = "";
 
+      // For hangman blanks
       let displayLetters = [];
       let revealed = new Set();
       let guessedLetters = new Set();
@@ -642,6 +724,15 @@
       function getMode() {
         return modeSelect.value;
       }
+      function getHardAnswerMode() {
+        return hardAnswerSelect.value === "kanji" ? "kanji" : "reading";
+      }
+      function getMaxWrong() {
+        const mode = getMode();
+        if (mode === "normal") return MAX_WRONG_NORMAL;
+        if (mode === "hard") return MAX_WRONG_HARD;
+        return MAX_WRONG_EASY;
+      }
 
       function setToast(type, msg) {
         toastText.textContent = msg;
@@ -649,11 +740,16 @@
         toastDot.classList.add(type === "ok" ? "ok" : "bad");
       }
 
+      function levelTargetCount() {
+        // user wants "out of 100" for the current level; last level may be smaller
+        return Math.max(1, levelSlice.length || WORDS_PER_LEVEL);
+      }
+
       function updateStats() {
-        statTotal.textContent = String(orderedWords.length);
-        statLevelSize.textContent = String(levelSlice.length);
-        statLives.textContent = String(Math.max(0, MAX_WRONG - wrong));
+        const maxWrong = getMaxWrong();
+        statLives.textContent = String(Math.max(0, maxWrong - wrong));
         statStreak.textContent = String(streak);
+        statSolvedLevel.textContent = `${solved}/${levelTargetCount()}`;
       }
 
       function beep(kind = "ok") {
@@ -701,6 +797,27 @@
           [arr[i], arr[j]] = [arr[j], arr[i]];
         }
         return arr;
+      }
+
+      // ========= Music =========
+      function applyMuteState() {
+        bgm.volume = 0.35;
+        bgm.muted = !!muteMusic.checked;
+        if (bgm.muted) {
+          // keep it simple: mute and pause to avoid wasting resources
+          try {
+            bgm.pause();
+          } catch (e) {}
+        } else {
+          // don't force autoplay; start on next user action (or try now)
+          bgm.play().catch(() => {});
+        }
+      }
+
+      function ensureBgmRunning() {
+        if (!muteMusic.checked && bgm.paused) {
+          bgm.play().catch(() => {});
+        }
       }
 
       // ========= CSV parsing (quoted commas) =========
@@ -955,12 +1072,32 @@
       }
 
       function setFrameByWrong() {
-        drawSpriteFrame(Math.min(SPRITE_FRAMES - 1, wrong));
+        // Map many lives onto 7 frames
+        const maxWrong = getMaxWrong();
+        const denom = Math.max(1, maxWrong);
+        const ratio = Math.min(1, wrong / denom);
+        const frame = Math.floor(ratio * (SPRITE_FRAMES - 1));
+        drawSpriteFrame(Math.min(SPRITE_FRAMES - 1, Math.max(0, frame)));
+      }
+
+      // ========= Keyboard Docking =========
+      function placeKeyboard() {
+        if (getMode() === "normal") {
+          keyboardDock.style.display = "block";
+          keyboardDockContent.appendChild(kbdHint);
+          keyboardDockContent.appendChild(keyboardEl);
+        } else {
+          keyboardDock.style.display = "none";
+          keyboardHome.appendChild(kbdHint);
+          keyboardHome.appendChild(keyboardEl);
+        }
       }
 
       // ========= Keyboard builder =========
       function clearKeyboard() {
         keyboardEl.innerHTML = "";
+        keyboardEl.classList.remove("kanaDock");
+        keyboardEl.style.gridTemplateColumns = "";
       }
 
       function makeRow(chars, isKana) {
@@ -971,7 +1108,7 @@
           b.className = "key" + (isKana ? " kana" : "");
           b.textContent = ch;
           if (isKana) {
-            b.addEventListener("click", () => onKanaKey(ch));
+            b.addEventListener("click", () => onKanaGuess(ch));
           } else {
             b.addEventListener("click", () => onLetterGuess(ch));
           }
@@ -980,36 +1117,26 @@
         return row;
       }
 
-      function addControlRow(isKana) {
+      function addControlRow() {
         const row = document.createElement("div");
         row.className = "kbdRow";
 
         const back = document.createElement("button");
-        back.className = "key wide" + (isKana ? " kana" : "");
+        back.className = "key wide";
         back.textContent = "⌫";
         back.title = "Backspace";
         back.addEventListener("click", () => {
-          if (isKana) {
-            kanaGuess.value = kanaGuess.value.slice(0, -1);
-            kanaGuess.focus();
-          } else {
-            fullGuess.value = fullGuess.value.slice(0, -1);
-            fullGuess.focus();
-          }
+          fullGuess.value = fullGuess.value.slice(0, -1);
+          fullGuess.focus();
         });
 
         const clr = document.createElement("button");
-        clr.className = "key wide" + (isKana ? " kana" : "");
+        clr.className = "key wide";
         clr.textContent = "clr";
         clr.title = "Clear";
         clr.addEventListener("click", () => {
-          if (isKana) {
-            kanaGuess.value = "";
-            kanaGuess.focus();
-          } else {
-            fullGuess.value = "";
-            fullGuess.focus();
-          }
+          fullGuess.value = "";
+          fullGuess.focus();
         });
 
         row.appendChild(back);
@@ -1021,40 +1148,64 @@
         clearKeyboard();
 
         const mode = getMode();
+
         if (mode === "easy") {
-          // QWERTY letter selection
+          keyboardEl.style.display = "flex";
           QWERTY_ROWS.forEach((r) =>
             keyboardEl.appendChild(makeRow(r.split(""), false))
           );
-          keyboardEl.appendChild(addControlRow(false));
-          kbdHint.style.display = "block";
-          kbdHint.textContent = "Click letters (QWERTY) for hangman guesses.";
-          keyboardEl.style.display = "flex";
-        } else if (mode === "normal") {
-          // Hiragana selection
-          HIRA_ROWS.forEach((r) =>
-            keyboardEl.appendChild(makeRow(r.split(""), true))
-          );
-          keyboardEl.appendChild(addControlRow(true));
+          keyboardEl.appendChild(addControlRow());
           kbdHint.style.display = "block";
           kbdHint.textContent =
-            "Click hiragana to build the reading (or type romaji).";
-          keyboardEl.style.display = "flex";
-        } else {
-          // Hard mode: no keyboard
-          kbdHint.style.display = "none";
-          keyboardEl.style.display = "none";
+            "Click letters (QWERTY) to guess romaji letters.";
+          return;
         }
+
+        if (mode === "normal") {
+          // Full-width docked kana keyboard: split into 2 columns (top half / bottom half)
+          keyboardEl.classList.add("kanaDock");
+
+          const cols = window.matchMedia("(min-width: 900px)").matches ? 2 : 1;
+          keyboardEl.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+
+          const colEls = [];
+          for (let i = 0; i < cols; i++) {
+            const c = document.createElement("div");
+            c.className = "kbdCol";
+            colEls.push(c);
+            keyboardEl.appendChild(c);
+          }
+
+          const split = Math.ceil(HIRA_ROWS.length / cols);
+          HIRA_ROWS.forEach((r, i) => {
+            const colIndex = Math.min(cols - 1, Math.floor(i / split));
+            colEls[colIndex].appendChild(makeRow(r.split(""), true));
+          });
+
+          const controlsWrap = document.createElement("div");
+          controlsWrap.className = "kbdControls";
+          controlsWrap.appendChild(addControlRow());
+          keyboardEl.appendChild(controlsWrap);
+
+          kbdHint.style.display = "block";
+          kbdHint.textContent =
+            "Click hiragana to guess (fills blanks). Or type full reading (kana/romaji) and Submit.";
+          return;
+        }
+
+        // hard mode
+        kbdHint.style.display = "none";
+        keyboardEl.style.display = "none";
       }
 
-      function resetLetterKeyStates() {
+      function resetKeyStates() {
         keyboardEl.querySelectorAll(".key").forEach((k) => {
           k.classList.remove("used", "good", "bad");
           k.disabled = false;
         });
       }
 
-      function markLetterKey(ch, status) {
+      function markKey(ch, status) {
         const key = [...keyboardEl.querySelectorAll(".key")].find(
           (k) => k.textContent === ch
         );
@@ -1173,11 +1324,10 @@
           );
           initLevelSelect(totalLevels);
 
-          btnLoadLevel.disabled = false;
-
           // Auto-load level 1
           loadSelectedLevel();
 
+          btnStart.disabled = levelWords.length === 0;
           setToast("ok", "Ready.");
           updateStats();
         } catch (err) {
@@ -1209,7 +1359,7 @@
         setToast(
           levelWords.length ? "ok" : "bad",
           levelWords.length
-            ? "Level loaded."
+            ? "Level loaded. Press Start."
             : "No playable words in this level."
         );
       }
@@ -1218,60 +1368,60 @@
       function applyModeUI() {
         const mode = getMode();
 
-        // Default: show Kanji + English
+        hardAnswerWrap.style.display = mode === "hard" ? "inline-flex" : "none";
+        toggleFurigana.disabled = mode !== "easy";
+
+        // Default visuals
         kanjiText.style.display = "block";
         meaningText.classList.remove("hard");
-        furiganaLine.style.display = "none";
         blanksEl.style.display = "flex";
+        mcqArea.style.display = "none";
 
-        // Inputs/buttons default
         fullGuess.style.display = "inline-block";
-        kanaGuess.style.display = "none";
         btnSubmit.style.display = "inline-block";
         btnHint.style.display = "inline-block";
-        guessBar.style.display = "flex";
+        btnSkip.style.display = "inline-block";
 
-        // Areas
-        mcqArea.style.display = "none";
-        keyboardEl.style.display = "flex";
-        kbdHint.style.display = "block";
+        // Furigana line
+        furiganaLine.style.display = "none";
 
         if (mode === "easy") {
-          // Show furigana + hangman letters (QWERTY)
-          furiganaLine.style.display = "block";
-          blanksEl.style.display = "flex";
-          kanaGuess.style.display = "none";
+          fullGuess.placeholder = "Type romaji and press Enter…";
+          furiganaLine.style.display = toggleFurigana.checked
+            ? "block"
+            : "none";
           btnHint.style.display = "inline-block";
         }
 
         if (mode === "normal") {
-          // Hide furigana, no hangman blanks; use romaji input OR kana keyboard builder
-          furiganaLine.style.display = "none";
-          blanksEl.style.display = "none";
-          kanaGuess.style.display = "inline-block";
+          fullGuess.placeholder = "Type kana/romaji to guess the full reading…";
           btnHint.style.display = "none";
         }
 
         if (mode === "hard") {
-          // Only English + 21 MCQ options
           kanjiText.style.display = "none";
           furiganaLine.style.display = "none";
           blanksEl.style.display = "none";
           meaningText.classList.add("hard");
 
-          // Hide input/submit/hint; keep skip
           fullGuess.style.display = "none";
-          kanaGuess.style.display = "none";
           btnSubmit.style.display = "none";
           btnHint.style.display = "none";
 
-          // Hide keyboard; show MCQ
-          keyboardEl.style.display = "none";
-          kbdHint.style.display = "none";
           mcqArea.style.display = "block";
         }
 
+        placeKeyboard();
         buildKeyboardForMode();
+
+        // Hide keyboard entirely in hard mode (after docking/build)
+        if (mode === "hard") {
+          kbdHint.style.display = "none";
+          keyboardEl.style.display = "none";
+        } else {
+          // in easy/normal show it (normal uses dock)
+          keyboardEl.style.display = "";
+        }
       }
 
       // ========= Game =========
@@ -1291,11 +1441,12 @@
       }
 
       function isSolvedLetters() {
-        return revealed.size >= displayLetters.length;
+        return (
+          revealed.size >= displayLetters.length && displayLetters.length > 0
+        );
       }
 
       function resetRunState() {
-        // Rebuild remaining pool for this run
         remaining = levelWords.map((_, i) => i);
 
         current = null;
@@ -1311,7 +1462,6 @@
         streak = 0;
 
         fullGuess.value = "";
-        kanaGuess.value = "";
         blanksEl.innerHTML = "";
         mcqGrid.innerHTML = "";
 
@@ -1321,7 +1471,7 @@
 
         setFrameByWrong();
         applyModeUI();
-        resetLetterKeyStates();
+        resetKeyStates();
         updateStats();
       }
 
@@ -1331,18 +1481,21 @@
         return remaining.splice(r, 1)[0];
       }
 
-      function startRun() {
+      function startOrRestart() {
+        ensureBgmRunning();
+        // Start does "load level" + start run
+        loadSelectedLevel();
         if (!levelWords.length) {
           setToast("bad", "No playable words in this level.");
           return;
         }
+        startRun();
+      }
 
-        // fresh run
+      function startRun() {
         remaining = levelWords.map((_, i) => i);
         solved = 0;
         streak = 0;
-
-        btnStart.disabled = true;
         nextWord();
         setToast("ok", "Run started.");
         updateStats();
@@ -1351,55 +1504,55 @@
       function nextWord() {
         const idx = pickNextIndex();
         if (idx === -1) {
-          setToast("ok", `Finished! Solved ${solved}/${levelWords.length}.`);
-          btnStart.disabled = false;
+          setToast("ok", `Finished! Solved ${solved}/${levelTargetCount()}.`);
           return;
         }
 
         current = levelWords[idx];
 
-        // per-word reset
         wrong = 0;
         guessedLetters = new Set();
         revealed = new Set();
         fullGuess.value = "";
-        kanaGuess.value = "";
         mcqGrid.innerHTML = "";
 
         kanjiText.textContent = current.kanji;
         meaningText.textContent = current.meaning;
         furiganaLine.textContent = `Furigana: ${current.furigana || "—"}`;
 
-        // Targets
         targetKanaNorm = normalizeKana(current.furiganaH);
         targetRomaji =
           current.romaji || normalizeRomaji(kanaToRomaji(current.furiganaH));
 
-        // Easy-mode blanks are for romaji letters
-        displayLetters = (targetRomaji || "").split("");
-        renderBlanks();
+        const mode = getMode();
+        if (mode === "easy") {
+          displayLetters = (targetRomaji || "").split("");
+          renderBlanks();
+        } else if (mode === "normal") {
+          displayLetters = (targetKanaNorm || "").split("");
+          renderBlanks();
+        } else {
+          displayLetters = [];
+          blanksEl.innerHTML = "";
+        }
 
         setFrameByWrong();
         applyModeUI();
-        resetLetterKeyStates();
+        resetKeyStates();
 
-        // Hard mode: build 21 choices (from same level)
-        if (getMode() === "hard") {
-          buildMCQChoices();
-        }
+        if (getMode() === "hard") buildMCQChoices();
 
         updateStats();
 
-        // Focus best input
-        if (getMode() === "normal") fullGuess.focus();
-        if (getMode() === "easy") fullGuess.focus();
+        if (getMode() !== "hard") fullGuess.focus();
       }
 
       function loseLife(extraMsg) {
+        const maxWrong = getMaxWrong();
         wrong++;
         setFrameByWrong();
         beep("bad");
-        const left = Math.max(0, MAX_WRONG - wrong);
+        const left = Math.max(0, maxWrong - wrong);
         setToast(
           "bad",
           extraMsg
@@ -1408,17 +1561,19 @@
         );
         updateStats();
 
-        if (wrong >= MAX_WRONG) {
+        if (wrong >= maxWrong) {
           streak = 0;
 
-          // Reveal answer in toast, then move on
-          const answer = current
-            ? current.furigana || targetRomaji || "—"
-            : "—";
+          const answer =
+            current && (current.kanji || current.furigana)
+              ? `${current.kanji || "—"} / ${current.furigana || "—"}`
+              : current
+              ? current.furigana || targetRomaji || "—"
+              : "—";
+
           setToast("bad", `Out of lives. Answer: ${answer}`);
 
-          // Show solved letters if easy mode
-          if (getMode() === "easy") {
+          if (getMode() === "easy" || getMode() === "normal") {
             revealAllLetters();
           }
 
@@ -1433,7 +1588,7 @@
         streak++;
         updateStats();
 
-        if (getMode() === "easy") {
+        if (getMode() === "easy" || getMode() === "normal") {
           revealAllLetters();
         }
 
@@ -1441,10 +1596,12 @@
         setTimeout(nextWord, 650);
       }
 
-      // ========= EASY: letter guessing =========
+      // ========= EASY: letter guessing (romaji blanks) =========
       function onLetterGuess(ch) {
         if (getMode() !== "easy") return;
         if (!current) return;
+
+        ensureBgmRunning();
 
         ch = normalizeRomaji(ch);
         if (!ch || ch.length !== 1) return;
@@ -1456,33 +1613,55 @@
           displayLetters.forEach((c, i) => {
             if (c === ch) revealed.add(i);
           });
-          markLetterKey(ch, "good");
+          markKey(ch, "good");
           beep("ok");
           renderBlanks();
           if (isSolvedLetters()) winWord();
         } else {
-          markLetterKey(ch, "bad");
+          markKey(ch, "bad");
           loseLife();
         }
       }
 
-      // ========= NORMAL: kana building =========
-      function onKanaKey(kana) {
+      // ========= NORMAL: kana hangman (kana blanks) =========
+      function onKanaGuess(kana) {
         if (getMode() !== "normal") return;
         if (!current) return;
-        kanaGuess.value += kana;
+
+        ensureBgmRunning();
+
+        const ch = String(kana || "");
+        if (!ch) return;
+        if (guessedLetters.has(ch)) return;
+
+        guessedLetters.add(ch);
+
+        if (displayLetters.includes(ch)) {
+          displayLetters.forEach((c, i) => {
+            if (c === ch) revealed.add(i);
+          });
+          markKey(ch, "good");
+          beep("ok");
+          renderBlanks();
+          if (isSolvedLetters()) winWord();
+        } else {
+          markKey(ch, "bad");
+          loseLife();
+        }
       }
 
       // ========= Submit (Easy/Normal) =========
       function submitGuess() {
         if (!current) return;
+        ensureBgmRunning();
 
         const mode = getMode();
         if (mode === "hard") return;
 
-        const romajiGuess = normalizeRomaji(fullGuess.value);
+        const raw = fullGuess.value;
 
         if (mode === "easy") {
+          const romajiGuess = normalizeRomaji(raw);
           if (!romajiGuess) return;
           if (romajiGuess === targetRomaji) {
             winWord();
@@ -1493,8 +1672,9 @@
           return;
         }
 
-        // normal: accept romaji OR kana
-        const kanaGuessNorm = normalizeKana(kataToHira(kanaGuess.value));
+        // normal: allow full-reading guess (kana OR romaji)
+        const kanaGuessNorm = normalizeKana(kataToHira(raw));
+        const romajiGuess = normalizeRomaji(raw);
         const kanaOK = kanaGuessNorm && kanaGuessNorm === targetKanaNorm;
         const romajiOK = romajiGuess && romajiGuess === targetRomaji;
 
@@ -1506,46 +1686,64 @@
         }
       }
 
-      // ========= Hard mode MCQ =========
+      // ========= Hard mode MCQ (Reading OR Kanji) =========
       function buildMCQChoices() {
         if (getMode() !== "hard") return;
         if (!current) return;
 
-        // Use readings from same level; 21 options if possible
+        const mode = getHardAnswerMode(); // "reading" | "kanji"
         const needed = Math.min(21, levelWords.length);
 
-        // Unique by normalized kana to avoid duplicates
-        const correctKey = normalizeKana(current.furiganaH);
+        const correctKey =
+          mode === "kanji"
+            ? String(current.kanji || "")
+            : normalizeKana(current.furiganaH);
+
         const pool = levelWords
           .filter((w) => w !== current)
-          .filter((w) => normalizeKana(w.furiganaH) !== correctKey);
+          .filter((w) => {
+            const k =
+              mode === "kanji"
+                ? String(w.kanji || "")
+                : normalizeKana(w.furiganaH);
+            return k && k !== correctKey;
+          });
 
         shuffle(pool);
 
         const picks = [];
         const used = new Set();
 
-        // add correct
         picks.push(current);
         used.add(correctKey);
 
         for (const w of pool) {
           if (picks.length >= needed) break;
-          const k = normalizeKana(w.furiganaH);
-          if (used.has(k)) continue;
+          const k =
+            mode === "kanji"
+              ? String(w.kanji || "")
+              : normalizeKana(w.furiganaH);
+          if (!k || used.has(k)) continue;
           used.add(k);
           picks.push(w);
         }
 
         shuffle(picks);
 
-        mcqHint.textContent = `Pick the correct reading (${picks.length} options).`;
+        mcqHint.textContent =
+          mode === "kanji"
+            ? `Pick the correct kanji (${picks.length} options).`
+            : `Pick the correct reading (${picks.length} options).`;
+
         mcqGrid.innerHTML = "";
 
         picks.forEach((w) => {
           const b = document.createElement("button");
           b.className = "mcqBtn";
-          b.textContent = w.furigana || w.furiganaH || "—";
+          b.textContent =
+            mode === "kanji"
+              ? w.kanji || "—"
+              : w.furigana || w.furiganaH || "—";
           b.addEventListener("click", () => {
             onMCQPick(w, b);
           });
@@ -1557,11 +1755,17 @@
         if (getMode() !== "hard") return;
         if (!current) return;
 
+        ensureBgmRunning();
+
+        const mode = getHardAnswerMode();
         const correct =
-          normalizeKana(word.furiganaH) === normalizeKana(current.furiganaH);
+          mode === "kanji"
+            ? String(word.kanji || "") === String(current.kanji || "")
+            : normalizeKana(word.furiganaH) ===
+              normalizeKana(current.furiganaH);
+
         if (correct) {
           btn.classList.add("good");
-          // disable all
           [...mcqGrid.querySelectorAll("button")].forEach(
             (b) => (b.disabled = true)
           );
@@ -1577,6 +1781,8 @@
       function hint() {
         if (getMode() !== "easy") return;
         if (!current) return;
+
+        ensureBgmRunning();
 
         const hidden = [];
         for (let i = 0; i < displayLetters.length; i++) {
@@ -1594,55 +1800,61 @@
 
       function skipWord() {
         if (!current) return;
+        ensureBgmRunning();
+
         streak = 0;
         setToast(
           "bad",
-          `Skipped. Answer: ${current.furigana || targetRomaji || "—"}`
+          `Skipped. Answer: ${current.kanji || "—"} / ${
+            current.furigana || targetRomaji || "—"
+          }`
         );
         updateStats();
         setTimeout(nextWord, 350);
       }
 
-      // ========= Music =========
-      async function toggleMusic() {
-        try {
-          if (bgm.paused) {
-            await bgm.play();
-            btnMusic.textContent = "Pause Music";
-          } else {
-            bgm.pause();
-            btnMusic.textContent = "Play Music";
-          }
-        } catch (e) {
-          setToast("bad", "Music couldn't start (check assets/music/bgm.mp3).");
-        }
-      }
-
       // ========= Events =========
-      btnLoadLevel.addEventListener("click", loadSelectedLevel);
-      btnStart.addEventListener("click", startRun);
+      btnStart.addEventListener("click", startOrRestart);
 
       btnResetRun.addEventListener("click", () => {
+        ensureBgmRunning();
         resetRunState();
         setToast("ok", "Reset.");
         btnStart.disabled = levelWords.length === 0;
       });
 
       btnPrevLevel.addEventListener("click", () => {
+        ensureBgmRunning();
         const v = Math.max(1, Number(levelSelect.value) - 1);
         levelSelect.value = String(v);
+        loadSelectedLevel();
       });
 
       btnNextLevel.addEventListener("click", () => {
+        ensureBgmRunning();
         const v = Math.min(totalLevels, Number(levelSelect.value) + 1);
         levelSelect.value = String(v);
+        loadSelectedLevel();
       });
 
-      // Mode change resets run so UI + logic stays consistent
+      levelSelect.addEventListener("change", () => {
+        ensureBgmRunning();
+        loadSelectedLevel();
+      });
+
       modeSelect.addEventListener("change", () => {
+        ensureBgmRunning();
         resetRunState();
         btnStart.disabled = levelWords.length === 0;
         setToast("ok", `Mode: ${getMode()}`);
+      });
+
+      toggleFurigana.addEventListener("change", () => {
+        applyModeUI();
+      });
+
+      hardAnswerSelect.addEventListener("change", () => {
+        if (getMode() === "hard" && current) buildMCQChoices();
       });
 
       btnSubmit.addEventListener("click", submitGuess);
@@ -1656,11 +1868,24 @@
       btnHint.addEventListener("click", hint);
       btnSkip.addEventListener("click", skipWord);
 
-      btnMusic.addEventListener("click", toggleMusic);
+      muteMusic.addEventListener("change", applyMuteState);
+
+      // Rebuild normal-mode keyboard on resize so it keeps the best layout
+      let resizeTimer = null;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (getMode() === "normal") {
+            placeKeyboard();
+            buildKeyboardForMode();
+          }
+        }, 120);
+      });
 
       // ========= Init =========
       initSprite();
-      buildKeyboardForMode();
+      applyMuteState();
+      placeKeyboard();
       applyModeUI();
       setToast("ok", "Loading jlpt_vocab.csv…");
       updateStats();
